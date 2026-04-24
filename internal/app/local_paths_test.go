@@ -1,0 +1,147 @@
+package app
+
+import (
+	"errors"
+	"testing"
+)
+
+func TestResolveLocalPathsUsesExplicitDatabasePath(t *testing.T) {
+	t.Parallel()
+
+	dataDir, databasePath, err := resolveLocalPaths(LocalPathConfig{
+		DatabasePath: "custom/openbudget.sqlite",
+	}, localPathRuntime{
+		getenv: func(string) string { return EnvDatabasePath + "-ignored" },
+		userHomeDir: func() (string, error) {
+			return "/home/tester", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve local paths with explicit database path: %v", err)
+	}
+	if dataDir != "custom" {
+		t.Fatalf("dataDir = %q, want %q", dataDir, "custom")
+	}
+	if databasePath != "custom/openbudget.sqlite" {
+		t.Fatalf("databasePath = %q, want %q", databasePath, "custom/openbudget.sqlite")
+	}
+}
+
+func TestResolveLocalPathsUsesOSDefaults(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name             string
+		env              map[string]string
+		homeDir          string
+		wantDataDir      string
+		wantDatabasePath string
+	}{
+		{
+			name:             "xdg data home",
+			env:              map[string]string{"XDG_DATA_HOME": "/tmp/data-home"},
+			homeDir:          "/home/tester",
+			wantDataDir:      "/tmp/data-home/openbudget",
+			wantDatabasePath: "/tmp/data-home/openbudget/openbudget.db",
+		},
+		{
+			name:             "fallback",
+			env:              map[string]string{},
+			homeDir:          "/home/tester",
+			wantDataDir:      "/home/tester/.local/share/openbudget",
+			wantDatabasePath: "/home/tester/.local/share/openbudget/openbudget.db",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dataDir, databasePath, err := resolveLocalPaths(LocalPathConfig{}, localPathRuntime{
+				getenv: func(key string) string {
+					return tc.env[key]
+				},
+				userHomeDir: func() (string, error) {
+					return tc.homeDir, nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("resolve local paths: %v", err)
+			}
+			if dataDir != tc.wantDataDir {
+				t.Fatalf("dataDir = %q, want %q", dataDir, tc.wantDataDir)
+			}
+			if databasePath != tc.wantDatabasePath {
+				t.Fatalf("databasePath = %q, want %q", databasePath, tc.wantDatabasePath)
+			}
+		})
+	}
+}
+
+func TestResolveLocalPathsSupportsDatabasePathEnvOverride(t *testing.T) {
+	t.Parallel()
+
+	dataDir, databasePath, err := resolveLocalPaths(LocalPathConfig{}, localPathRuntime{
+		getenv: func(key string) string {
+			switch key {
+			case EnvDatabasePath:
+				return "/tmp/override/custom.db"
+			default:
+				return ""
+			}
+		},
+		userHomeDir: func() (string, error) {
+			return "/home/tester", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve local paths: %v", err)
+	}
+	if dataDir != "/tmp/override" {
+		t.Fatalf("dataDir = %q, want %q", dataDir, "/tmp/override")
+	}
+	if databasePath != "/tmp/override/custom.db" {
+		t.Fatalf("databasePath = %q, want %q", databasePath, "/tmp/override/custom.db")
+	}
+}
+
+func TestResolveLocalPathsIgnoresRetiredDataDirEnv(t *testing.T) {
+	t.Parallel()
+
+	dataDir, databasePath, err := resolveLocalPaths(LocalPathConfig{}, localPathRuntime{
+		getenv: func(key string) string {
+			switch key {
+			case "OPENBUDGET_DATA_DIR", "DATA_DIR":
+				return "/tmp/retired-data-dir"
+			default:
+				return ""
+			}
+		},
+		userHomeDir: func() (string, error) {
+			return "/home/tester", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve local paths: %v", err)
+	}
+	if dataDir != "/home/tester/.local/share/openbudget" {
+		t.Fatalf("dataDir = %q, want default path", dataDir)
+	}
+	if databasePath != "/home/tester/.local/share/openbudget/openbudget.db" {
+		t.Fatalf("databasePath = %q, want default database", databasePath)
+	}
+}
+
+func TestResolveLocalPathsPropagatesHomeDirErrors(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := resolveLocalPaths(LocalPathConfig{}, localPathRuntime{
+		getenv: func(string) string { return "" },
+		userHomeDir: func() (string, error) {
+			return "", errors.New("boom")
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

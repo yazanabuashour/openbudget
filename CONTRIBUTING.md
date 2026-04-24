@@ -8,12 +8,19 @@ This repository is still in the scaffold stage. There is no runnable app or publ
 
 If a pull request introduces the first runnable component, it should also introduce the tests, local run instructions, and compatibility notes needed to support that component.
 
+The current local runtime foundation uses a single SQLite database path. Use
+`OPENBUDGET_DATABASE_PATH="$(mktemp -d)/openbudget.db"` for throwaway local runs
+or tests that need to avoid the default user data location. Do not add
+`OPENBUDGET_DATA_DIR`, `DATA_DIR`, or new environment variables for runtime
+settings that can live in the database after SQLite opens.
+
 ## Local setup
 
 Maintainers prefer:
 
 ```bash
 mise install
+OPENBUDGET_DATABASE_PATH="$(mktemp -d)/openbudget.db" mise exec -- go test ./...
 ```
 
 Outside contributors may use their own local tooling if they can satisfy the repository checks.

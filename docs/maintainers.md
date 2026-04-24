@@ -57,6 +57,8 @@ bd dolt pull
 - Policy and workflow files are part of the public contract and should stay reviewable in Git alone.
 - Do not document machine-absolute filesystem paths in committed docs.
 - Do not assume private infrastructure, deploy secrets, or internal services exist unless they have been added explicitly.
+- Keep local runtime configuration centered on `OPENBUDGET_DATABASE_PATH`; store later runtime settings in SQLite instead of adding more environment variables.
+- Any future Codex eval harness should create an isolated `<run-root>/codex-home`, copy only `auth.json`, set `CODEX_HOME` for Codex commands, and pass `--ignore-user-config`.
 
 ## Repository administration
 
